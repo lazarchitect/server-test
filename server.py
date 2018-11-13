@@ -17,7 +17,7 @@ class gameCreatorThread(Thread):
 			print(waitingroom)
 			sleep(1)
 			if len(waitingroom) > 1:
-				print("holy dickballs batman!")
+				print("game beginning")
 				player1 = waitingroom[0]
 				player2 = waitingroom[1]
 				g = game(player1, player2)
@@ -34,15 +34,15 @@ class clientThread(Thread):
 
 	def run(self):
 		while 1:
-			response = self.readinput()
-			print(self, "response is " + response)
+			response = self.getmsg()
 			if response == "I want to play":
 				self.waitForOpponent()
+				break	
 
 	def sendmsg(self, sendstr):
 		self.client.send(sendstr.encode('utf-8'))
 	
-	def readinput(self):
+	def getmsg(self):
 		return self.client.recv(1024).decode("utf-8")
 
 	def waitForOpponent(self):
@@ -68,38 +68,80 @@ class game:
 		self.p1.waiting = False
 		self.p2.waiting = False
 
-		
+		"""
+		players receive "enter game".
+		at this point they start taking turns.
+		player 1 goes first.
+		send him a "your turn" message.
+		he responds with his play.
+		receive it.
+
+		if score == 5, send both players "game over". send player 1 "you win"
+
+		send player 1 a message. it says "player 2 is going...."
+		now, send player 2 "your turn".
+		she responds with her play.
+		receive it.
+
+		if score == 5, send both players "game over" and send player 2 "you win"
+
+		send her "player 1 is going..."
+
+
+		okay, so the general pattern is,
+
 		while 1:
-			self.p1.sendmsg("your turn")
-			move = self.p1.readinput()
-			if move == "add 1":
-				score += 1
-			elif move == "add 2":
-				score += 2
-			elif move == "sub 1":
-				score -= 1
-			elif move == "game over":
-				return;
+		for each player:
+			send "your turn"
+			wait for play
+			evaluate it
+			send both players the play
+			if game over: 
+				send "game over" to both
+				send "you win" to current player
+				send "you lose" to other player
+				end game (return)
+			send "other guy is going" to current player.	
 
-			self.p2.sendmsg("your turn")
-			move = self.p2.readinput()
-			if move == "add 1":
-				score += 1
-			elif move == "add 2":
-				score += 2
-			elif move == "sub 1":
-				score -= 1
-			elif move == "game over":
-				return;
 
+		"""
+
+		while 1:
+			for currPlayer in [self.p1, self.p2]:
+				
+				currPlayer.sendmsg("yourTurn " + str(self.score))
+				
+				play = currPlayer.getmsg() #halts
+
+				if play == "add 1":
+					self.score += 1
+				elif play == "add 2":
+					self.score += 2
+				elif play == "sub 1":
+					self.score -= 1
+				#(its impossible for the client to send anything else.)
+
+				self.sendtoboth("scoreIs " + str(self.score))
+
+				if self.score == 5:
+					self.sendtoboth("gameOver")
+					sleep(.2)
+					currPlayer.sendmsg("youWin")
+					if currPlayer==self.p1:
+						self.p2.sendmsg("youLose")
+					else:
+						self.p1.sendmsg("youLose")	
+					return
+
+				currPlayer.sendmsg("opponentGoing")	
 
 
 def main():
 	global waitingroom
 	host = ''
 	port = 50000
-	backlog = 5 
-	size = 1024 
+	backlog = 5
+	size = 1024
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
 	s.bind((host, port)) 
 	s.listen(backlog)
